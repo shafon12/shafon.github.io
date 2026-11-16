@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>СИМУЛЯТОР ТЕМЩИКА 2.0</title>
+<!-- Telegram WebApp SDK -->
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<style>
+  :root {
+    --bg-dark: #0a0d14;
+    --card-bg: #131926;
+    --accent-green: #10b981;
+    --accent-gold: #f59e0b;
+    --accent-pink: #ec4899;
+    --accent-blue: #38bdf8;
+    --border: #1f293d;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; user-select: none; -webkit-user-select: none; }
+  
+  html, body {
+    width: 100%;
+    height: 100%;
+    background: var(--bg-dark);
+    color: #f8fafc;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* --- ИНТРО (КАТ-СЦЕНА) --- */
+  #introModal {
+    position: fixed; inset: 0; background: #05070a; z-index: 9999;
+    display: flex; flex-direction: column; justify-content: center; align-items: center;
+    padding: 24px; text-align: center;
+  }
+  .cutscene-art { font-size: 70px; margin-bottom: 20px; animation: pulse 2s infinite; }
+  @keyframes pulse { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.1); } }
+  .cutscene-title { font-size: 24px; font-weight: 900; color: var(--accent-gold); margin-bottom: 12px; }
+  .cutscene-text { font-size: 15px; color: #94a3b8; line-height: 1.5; min-height: 70px; max-width: 320px; }
+  .cutscene-btn {
+    margin-top: 25px; background: linear-gradient(135deg, #10b981, #059669);
+    border: none; color: #fff; font-size: 16px; font-weight: 800; padding: 14px 32px;
+    border-radius: 14px; cursor: pointer; box-shadow: 0 4px 20px rgba(16, 185, 129, 0.4);
+  }
+
+  /* --- ШАПКА --- */
+  .top-bar {
+    position: fixed; top: 0; left: 0; right: 0; height: 60px;
+    padding: 10px 16px; display: flex; justify-content: space-between; align-items: center;
+    background: var(--card-bg); border-bottom: 1px solid var(--border); z-index: 100;
+  }
+  .user-badge { display: flex; align-items: center; gap: 8px; }
+  .user-avatar { width: 36px; height: 36px; border-radius: 50%; background: #2563eb; display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .user-info { display: flex; flex-direction: column; }
+  .user-name { font-size: 13px; font-weight: bold; color: #f8fafc; }
+  .user-rank { font-size: 11px; font-weight: 700; color: var(--accent-gold); text-transform: uppercase; }
+  .stat-passive { text-align: right; font-size: 11px; color: #94a3b8; }
+  .stat-passive span { color: var(--accent-green); font-weight: bold; display: block; font-size: 13px; }
+
+  /* --- ОСНОВНАЯ ОБЛАСТЬ --- */
+  .main-content {
+    position: absolute; top: 60px; bottom: 65px; left: 0; right: 0;
+    overflow-y: auto; padding: 16px; display: flex; flex-direction: column; align-items: center;
+  }
+  .tab-screen { display: none; width: 100%; max-width: 420px; flex-direction: column; align-items: center; }
+  .tab-screen.active { display: flex; }
+
+  /* --- ЭКРАН 1: КЛИКЕР --- */
+  .balance-display { text-align: center; margin: 10px 0 10px 0; }
+  .balance-val { font-size: 36px; font-weight: 900; color: #fff; }
+  .fever-alert { font-size: 12px; font-weight: 800; color: var(--accent-pink); height: 16px; text-transform: uppercase; }
+
+  .fever-meter { width: 100%; height: 8px; background: #1e293b; border-radius: 4px; overflow: hidden; margin-bottom: 20px; }
+  .fever-fill { width: 0%; height: 100%; background: linear-gradient(90deg, #38bdf8, #ec4899); transition: width 0.1s linear; }
+
+  .tap-target {
+    position: relative; width: 180px; height: 180px; border-radius: 50%;
+    background: radial-gradient(circle, #1e293b 0%, #0f172a 100%);
+    border: 6px solid var(--border); display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.5); cursor: pointer; transition: transform 0.05s ease;
+  }
+  .tap-target:active { transform: scale(0.92); }
+  .tap-target-icon { font-size: 80px; pointer-events: none; }
+
+  .energy-box { margin-top: 20px; font-size: 13px; color: #94a3b8; }
+
+  .floating-tap-text {
+    position: fixed; font-weight: 900; font-size: 24px; color: var(--accent-green);
+    pointer-events: none; animation: floatAnim 0.7s ease-out forwards; z-index: 1000;
+  }
+  @keyframes floatAnim {
+    0% { opacity: 1; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-70px) scale(1.3); }
+  }
+
+  /* --- ЭКРАН 2: КРАШ-КАЗИК --- */
+  .crash-arena {
+    width: 100%; background: var(--card-bg); border-radius: 16px; border: 1px solid var(--border);
+    padding: 20px; text-align: center; margin-top: 10px;
+  }
+  .crash-multiplier { font-size: 48px; font-weight: 900; color: var(--accent-gold); margin: 15px 0; }
+  .crash-controls { display: flex; gap: 10px; width: 100%; }
+  .crash-input {
+    flex: 1; background: #0f172a; border: 1px solid var(--border); border-radius: 10px;
+    color: #fff; padding: 12px; font-size: 16px; font-weight: bold; text-align: center;
+  }
+  .btn-action {
+    background: var(--accent-green); color: #fff; border: none; font-weight: 800; font-size: 14px;
+    padding: 12px 18px; border-radius: 10px; cursor: pointer; flex: 1;
+  }
+
+  /* --- ЭКРАН 3 И 4: СПИСКИ --- */
+  .cards-list { width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: 5px; }
+  .biz-card {
+    background: var(--card-bg); border: 1px solid var(--border); border-radius: 14px;
+    padding: 12px; display: flex; justify-content: space-between; align-items: center;
+  }
+  .biz-left { display: flex; align-items: center; gap: 12px; }
+  .biz-icon { font-size: 28px; }
+  .biz-title { font-size: 13px; font-weight: 700; color: #fff; }
+  .biz-profit { font-size: 11px; color: var(--accent-green); margin-top: 2px; }
+
+  /* --- ФИКСИРОВАННОЕ НИЖНЕЕ МЕНЮ --- */
+  .bottom-nav {
+    position: fixed; bottom: 0; left: 0; right: 0; height: 65px;
+    display: flex; justify-content: space-around; background: var(--card-bg);
+    border-top: 1px solid var(--border); z-index: 1000;
+  }
+  .nav-item {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+    background: none; border: none; color: #64748b; font-size: 10px; font-weight: 700; cursor: pointer; flex: 1;
+  }
+  .nav-item.active { color: var(--accent-green); }
+  .nav-icon { font-size: 22px; }
+</style>
+</head>
+<body>
+
+<!-- ИНТРО -->
+<div id="introModal">
+  <div class="cutscene-art" id="csArt">📦</div>
+  <div class="cutscene-title" id="csTitle">МОСКВА. НОЯБРЬ.</div>
+  <div class="cutscene-text" id="csText">Хозяйка выкинула твои шмотки из хаты за неуплату. В кармане ровно 500 рублей...</div>
+  <button class="cutscene-btn" id="csBtn" onclick="nextCutscene()">Дальше ➔</button>
+</div>
+
+<!-- ВЕРХНИЙ БАР -->
+<div class="top-bar">
+  <div class="user-badge">
+    <div class="user-avatar">😎</div>
+    <div class="user-info">
+      <span class="user-name" id="uName">Стас Темщик</span>
+      <span class="user-rank" id="uRank">Шкет у метро</span>
+    </div>
+  </div>
+  <div class="stat-passive">
+    Пассивный доход:
+    <span id="pIncomeDisplay">+0 ₽/сек</span>
+  </div>
+</div>
+
+<!-- ОСНОВНАЯ ЧАСТЬ -->
+<div class="main-content">
+
+  <!-- РЕЖИМ 1: СУЕТА (КЛИКЕР) -->
+  <div class="tab-screen active" id="screen-clicker">
+    <div class="balance-display">
+      <div class="balance-val" id="balanceDisplay">500 ₽</div>
+      <div class="fever-alert" id="feverAlert"></div>
+    </div>
+
+    <div class="fever-meter">
+      <div class="fever-fill" id="feverFill"></div>
+    </div>
+
+    <div class="tap-target" id="tapButton">
+      <div class="tap-target-icon" id="carTapAvatar">👟</div>
+    </div>
+
+    <div class="energy-box">
+      ⚡ Энергия: <b id="energyVal" style="color:#fff;">1000 / 1000</b>
+    </div>
+  </div>
+
+  <!-- РЕЖИМ 2: КРАШ-КАЗИК -->
+  <div class="tab-screen" id="screen-crash">
+    <h2 style="font-size:18px; font-weight:800; margin-bottom:4px;">🚀 РАКЕТА ТЕМЩИКА</h2>
+    <p style="font-size:11px; color:#94a3b8; margin-bottom:10px;">Забирай бабки до того, как темка накроется!</p>
+
+    <div class="crash-arena">
+      <div style="font-size: 12px; color:#94a3b8;" id="crashStatus">Ожидание ставки...</div>
+      <div class="crash-multiplier" id="crashMult">1.00x</div>
+      
+      <div class="crash-controls">
+        <input type="number" class="crash-input" id="crashBetInput" placeholder="Ставка ₽" value="100">
+        <button class="btn-action" id="crashBtn" onclick="handleCrashAction()">ВЗЛЁТ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- РЕЖИМ 3: ТЕМКИ (УЛУЧШЕНИЯ) -->
+  <div class="tab-screen" id="screen-biz">
+    <h2 style="font-size:16px; font-weight:800; margin-bottom:10px; align-self:flex-start;">💼 Рабочие Темки</h2>
+    <div class="cards-list" id="bizList"></div>
+  </div>
+
+  <!-- РЕЖИМ 4: ГАРАЖ (ТАЧКИ) -->
+  <div class="tab-screen" id="screen-garage">
+    <h2 style="font-size:16px; font-weight:800; margin-bottom:10px; align-self:flex-start;">🏎️ Твой Автопарк</h2>
+    <div class="cards-list" id="garageList"></div>
+  </div>
+
+</div>
+
+<!-- ЖЕСТКО ЗАФИКСИРОВАННОЕ НИЖНЕЕ МЕНЮ -->
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchTab('clicker', this)">
+    <span class="nav-icon">💸</span>
+    Суета
+  </button>
+  <button class="nav-item" onclick="switchTab('crash', this)">
+    <span class="nav-icon">🎲</span>
+    Краш
+  </button>
+  <button class="nav-item" onclick="switchTab('biz', this)">
+    <span class="nav-icon">🏢</span>
+    Темки
+  </button>
+  <button class="nav-item" onclick="switchTab('garage', this)">
+    <span class="nav-icon">🏎️</span>
+    Гараж
+  </button>
+</nav>
+
+<script>
+// --- ИНИЦИАЛИЗАЦИЯ TELEGRAM SDK ---
+const tg = window.Telegram?.WebApp;
+if (tg) {
+  tg.expand();
+  if (tg.initDataUnsafe?.user) {
+    document.getElementById('uName').innerText = tg.initDataUnsafe.user.first_name + ' (Темщик)';
+  }
+}
+
+function haptic(type = 'light') {
+  if (tg?.HapticFeedback) {
+    if (type === 'light') tg.HapticFeedback.impactOccurred('light');
+    if (type === 'heavy') tg.HapticFeedback.impactOccurred('heavy');
+    if (type === 'success') tg.HapticFeedback.notificationOccurred('success');
+    if (type === 'error') tg.HapticFeedback.notificationOccurred('error');
+  }
+}
+
+// --- КАТ-СЦЕНЫ ---
+const cutscenes = [
+  { art: '📦', title: 'ХОЛОДНЫЙ НОЯБРЬ', text: 'Тебя выселили из съёмной хаты за неуплату. В кармане всего 500 рублей и севший телефон.' },
+  { art: '📞', title: 'ЗВОНОК ОТ КЕНТА', text: '«Братва, хватит сопли жевать! В городе столько мутных схем, надо только начать крутиться!»' },
+  { art: '🚀', title: 'ПОРА ПОДНИМАТЬСЯ', text: 'Цель одна: подняться с нуля, открыть бизнес, купить Гелик и стать Теневым Магнатом города!' }
+];
+let csStep = 0;
+
+function nextCutscene() {
+  csStep++;
+  haptic('light');
+  if (csStep < cutscenes.length) {
+    document.getElementById('csArt').innerText = cutscenes[csStep].art;
+    document.getElementById('csTitle').innerText = cutscenes[csStep].title;
+    document.getElementById('csText').innerText = cutscenes[csStep].text;
+    if (csStep === cutscenes.length - 1) document.getElementById('csBtn').innerText = 'НАЧАТЬ ДВИЖ 🔥';
+  } else {
+    document.getElementById('introModal').style.display = 'none';
+    localStorage.setItem('hustle_intro_done', 'true');
+  }
+}
+
+if (localStorage.getItem('hustle_intro_done')) {
+  document.getElementById('introModal').style.display = 'none';
+}
+
+// --- СОСТОЯНИЕ ИГРЫ ---
+let state = {
+  balance: 500,
+  clickPower: 1,
+  passiveIncome: 0,
+  energy: 1000,
+  maxEnergy: 1000,
+  combo: 0,
+  fever: false,
+  carIcon: '👟'
+};
+
+const saved = localStorage.getItem('hustle_save_v2');
+if (saved) {
+  try { Object.assign(state, JSON.parse(saved)); } catch(e){}
+}
+
+function saveGame() {
+  localStorage.setItem('hustle_save_v2', JSON.stringify(state));
+}
+
+const RANKS = [
+  { name: 'Шкет у метро', min: 0 },
+  { name: 'Перекуп с Авито', min: 5000 },
+  { name: 'Суетолог с района', min: 35000 },
+  { name: 'Крипто-Магнат', min: 250000 },
+  { name: 'Хозяин Города', min: 1000000 }
+];
+
+let businesses = [
+  { id: 1, icon: '🎧', name: 'Паленая Акустика', cost: 150, profit: 4, count: 0 },
+  { id: 2, icon: '💨', name: 'Вейп Островок', cost: 900, profit: 22, count: 0 },
+  { id: 3, icon: '🧼', name: 'Автомойка 24/7', cost: 4500, profit: 95, count: 0 },
+  { id: 4, icon: '🖥️', name: 'Гаражный Майнинг', cost: 22000, profit: 450, count: 0 },
+  { id: 5, icon: '🏦', name: 'P2P Обменник', cost: 110000, profit: 2400, count: 0 }
+];
+
+let cars = [
+  { id: 1, icon: '🚗', name: 'ВАЗ-2114 «Четырка»', cost: 2500, boost: 5, bought: false },
+  { id: 2, icon: '🏎️', name: 'Марк 2 Черностой', cost: 15000, boost: 25, bought: false },
+  { id: 3, icon: '🖤', name: 'BMW M5 F90', cost: 90000, boost: 120, bought: false },
+  { id: 4, icon: '👑', name: 'Mercedes G63 AMG', cost: 500000, boost: 600, bought: false }
+];
+
+function updateUI() {
+  document.getElementById('balanceDisplay').innerText = Math.floor(state.balance).toLocaleString('ru-RU') + ' ₽';
+  document.getElementById('pIncomeDisplay').innerText = '+' + Math.floor(state.passiveIncome).toLocaleString('ru-RU') + ' ₽/сек';
+  document.getElementById('energyVal').innerText = `${state.energy} / ${state.maxEnergy}`;
+  document.getElementById('carTapAvatar').innerText = state.carIcon;
+
+  let currentRank = RANKS[0].name;
+  for (let r of RANKS) {
+    if (state.balance >= r.min) currentRank = r.name;
+  }
+  document.getElementById('uRank').innerText = currentRank;
+
+  renderBiz();
+  renderGarage();
+}
+
+// КЛИКЕР
+const tapBtn = document.getElementById('tapButton');
+
+tapBtn.addEventListener('pointerdown', (e) => {
+  if (state.energy < 1) {
+    haptic('error');
+    return;
+  }
+
+  state.energy--;
+  let mult = state.fever ? 5 : 1;
+  let earned = state.clickPower * mult;
+  state.balance += earned;
+
+  haptic(state.fever ? 'heavy' : 'light');
+
+  if (!state.fever) {
+    state.combo = Math.min(state.combo + 5, 100);
+    document.getElementById('feverFill').style.width = state.combo + '%';
+    if (state.combo >= 100) startFever();
+  }
+
+  showFloatingTap(e.clientX, e.clientY, `+${earned} ₽`);
+  updateUI();
+});
+
+function showFloatingTap(x, y, text) {
+  const el = document.createElement('div');
+  el.className = 'floating-tap-text';
+  el.innerText = text;
+  el.style.left = (x - 20) + 'px';
+  el.style.top = (y - 30) + 'px';
+  if (state.fever) el.style.color = 'var(--accent-pink)';
+  document.body.appendChild(el);
+  setTimeout(() => el.remove(), 700);
+}
+
+function startFever() {
+  state.fever = true;
+  haptic('success');
+  document.getElementById('feverAlert').innerText = '🔥 СУЕТА x5 ВКЛЮЧЕНА! 🔥';
+  let timer = setInterval(() => {
+    state.combo -= 6;
+    document.getElementById('feverFill').style.width = state.combo + '%';
+    if (state.combo <= 0) {
+      clearInterval(timer);
+      state.fever = false;
+      document.getElementById('feverAlert').innerText = '';
+    }
+  }, 100);
+}
+
+setInterval(() => {
+  if (!state.fever && state.combo > 0) {
+    state.combo = Math.max(state.combo - 3, 0);
+    document.getElementById('feverFill').style.width = state.combo + '%';
+  }
+}, 150);
+
+setInterval(() => {
+  if (state.energy < state.maxEnergy) {
+    state.energy = Math.min(state.energy + 3, state.maxEnergy);
+    document.getElementById('energyVal').innerText = `${state.energy} / ${state.maxEnergy}`;
+  }
+}, 1000);
+
+setInterval(() => {
+  if (state.passiveIncome > 0) {
+    state.balance += state.passiveIncome;
+    updateUI();
+  }
+  saveGame();
+}, 1000);
+
+// БИЗНЕСЫ
+function renderBiz() {
+  const list = document.getElementById('bizList');
+  list.innerHTML = '';
+  businesses.forEach(b => {
+    const card = document.createElement('div');
+    card.className = 'biz-card';
+    card.innerHTML = `
+      <div class="biz-left">
+        <div class="biz-icon">${b.icon}</div>
+        <div>
+          <div class="biz-title">${b.name} (${b.count})</div>
+          <div class="biz-profit">+${b.profit} ₽/сек</div>
+        </div>
+      </div>
+      <button class="btn-action" style="padding: 8px 12px; font-size:11px;" 
+        ${state.balance < b.cost ? 'disabled' : ''} onclick="buyBiz(${b.id})">
+        ${Math.floor(b.cost).toLocaleString('ru-RU')} ₽
+      </button>
+    `;
+    list.appendChild(card);
+  });
+}
+
+window.buyBiz = function(id) {
+  const b = businesses.find(x => x.id === id);
+  if (state.balance >= b.cost) {
+    state.balance -= b.cost;
+    b.count++;
+    state.passiveIncome += b.profit;
+    b.cost = Math.floor(b.cost * 1.4);
+    haptic('success');
+    updateUI();
+  }
+};
+
+// ГАРАЖ
+function renderGarage() {
+  const list = document.getElementById('garageList');
+  list.innerHTML = '';
+  cars.forEach(c => {
+    const card = document.createElement('div');
+    card.className = 'biz-card';
+    card.innerHTML = `
+      <div class="biz-left">
+        <div class="biz-icon">${c.icon}</div>
+        <div>
+          <div class="biz-title">${c.name}</div>
+          <div class="biz-profit">+${c.boost} к тапу</div>
+        </div>
+      </div>
+      <button class="btn-action" style="padding: 8px 12px; font-size:11px;"
+        ${c.bought ? 'disabled' : (state.balance < c.cost ? 'disabled' : '')}
+        onclick="buyCar(${c.id})">
+        ${c.bought ? 'В ГАРАЖЕ' : c.cost.toLocaleString('ru-RU') + ' ₽'}
+      </button>
+    `;
+    list.appendChild(card);
+  });
+}
+
+window.buyCar = function(id) {
+  const c = cars.find(x => x.id === id);
+  if (!c.bought && state.balance >= c.cost) {
+    state.balance -= c.cost;
+    c.bought = true;
+    state.clickPower += c.boost;
+    state.carIcon = c.icon;
+    haptic('success');
+    updateUI();
+  }
+};
+
+// КРАШ-КАЗИНО
+let crashState = 'idle';
+let crashMultiplier = 1.00;
+let crashCrashPoint = 0;
+let crashBet = 0;
+let crashTimer = null;
+
+function handleCrashAction() {
+  const btn = document.getElementById('crashBtn');
+  const input = document.getElementById('crashBetInput');
+  const status = document.getElementById('crashStatus');
+
+  if (crashState === 'idle') {
+    crashBet = parseInt(input.value);
+    if (isNaN(crashBet) || crashBet <= 0 || crashBet > state.balance) {
+      haptic('error');
+      alert('Недостаточно денег!');
+      return;
+    }
+
+    state.balance -= crashBet;
+    updateUI();
+
+    crashState = 'running';
+    btn.innerText = 'ЗАБРАТЬ КЭШ!';
+    btn.style.background = 'var(--accent-gold)';
+    status.innerText = 'Ракета летит... Успей забрать!';
+
+    crashMultiplier = 1.00;
+    let r = Math.random();
+    if (r < 0.5) crashCrashPoint = (1.05 + Math.random() * 0.9);
+    else if (r < 0.85) crashCrashPoint = (2.0 + Math.random() * 2.5);
+    else crashCrashPoint = (5.0 + Math.random() * 10);
+
+    crashTimer = setInterval(() => {
+      crashMultiplier += 0.04 * (crashMultiplier * 0.6);
+      document.getElementById('crashMult').innerText = crashMultiplier.toFixed(2) + 'x';
+
+      if (crashMultiplier >= crashCrashPoint) {
+        clearInterval(crashTimer);
+        crashState = 'idle';
+        haptic('heavy');
+        document.getElementById('crashMult').innerText = '💥 ВЗРЫВ!';
+        status.innerText = 'ОМОН накрыл лавочку! Бабки сгорели.';
+        btn.innerText = 'ВЗЛЁТ';
+        btn.style.background = 'var(--accent-green)';
+      }
+    }, 80);
+
+  } else if (crashState === 'running') {
+    clearInterval(crashTimer);
+    let winAmount = Math.floor(crashBet * crashMultiplier);
+    state.balance += winAmount;
+    crashState = 'idle';
+    haptic('success');
+    status.innerText = `Забрал +${winAmount.toLocaleString('ru-RU')} ₽!`;
+    btn.innerText = 'ВЗЛЁТ';
+    btn.style.background = 'var(--accent-green)';
+    updateUI();
+  }
+}
+
+// ПЕРЕКЛЮЧЕНИЕ ВКЛАДОК
+function switchTab(name, btn) {
+  haptic('light');
+  document.querySelectorAll('.tab-screen').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-item').forEach(b => b.classList.remove('active'));
+  document.getElementById('screen-' + name).classList.add('active');
+  btn.classList.add('active');
+}
+
+updateUI();
+</script>
+</body>
+</html>
